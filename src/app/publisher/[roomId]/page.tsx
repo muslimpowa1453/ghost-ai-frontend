@@ -38,10 +38,10 @@ export default function PublisherPage({ params }: PageProps) {
   const [subscriberOnline, setSubscriberOnline] = useState(false);
   const [aiStatus, setAiStatus] = useState("idle"); // idle | solving | error
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [diffThreshold, setDiffThreshold] = useState(1.5); // Pixel difference % threshold
+  const [diffThreshold, setDiffThreshold] = useState(0.08); // Pixel difference % threshold
 
   // Ref to bypass React state stale closures in intervals
-  const diffThresholdRef = useRef(1.5);
+  const diffThresholdRef = useRef(0.08);
   useEffect(() => {
     diffThresholdRef.current = diffThreshold;
   }, [diffThreshold]);
@@ -421,19 +421,19 @@ export default function PublisherPage({ params }: PageProps) {
             <div className="space-y-2 pt-2 border-t border-zinc-900">
               <div className="flex justify-between text-xs">
                 <span className="text-zinc-500 font-medium">Değişim Hassasiyeti</span>
-                <span className="text-violet-400 font-semibold">% {diffThreshold.toFixed(1)}</span>
+                <span className="text-violet-400 font-semibold">% {diffThreshold.toFixed(2)}</span>
               </div>
               <input
                 type="range"
-                min="0.5"
-                max="5.0"
-                step="0.1"
+                min="0.01"
+                max="2.00"
+                step="0.01"
                 value={diffThreshold}
                 onChange={(e) => setDiffThreshold(parseFloat(e.target.value))}
                 className="w-full accent-violet-500 bg-zinc-900 rounded-lg appearance-none h-1 cursor-pointer"
               />
               <p className="text-[10px] text-zinc-600 leading-normal pl-0.5">
-                * Ekrandaki piksel değişimi bu yüzden büyük olduğunda AI otomatik tetiklenir.
+                * Ekrandaki piksel değişimi bu yüzden büyük olduğunda AI otomatik tetiklenir. Karakter yazımını yakalamak için % 0.05 - 0.10 arası önerilir.
               </p>
             </div>
           </div>
