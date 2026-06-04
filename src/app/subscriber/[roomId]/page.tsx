@@ -14,8 +14,7 @@ import {
   HelpCircle,
   FileCode2,
   FileText,
-  Play,
-  Pause
+  Camera
 } from "lucide-react";
 
 interface PageProps {
@@ -34,18 +33,10 @@ export default function SubscriberPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<"idle" | "solving" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
-  const [isPaused, setIsPaused] = useState(false);
-  const isPausedRef = useRef(false);
-
-  useEffect(() => {
-    isPausedRef.current = isPaused;
-  }, [isPaused]);
-
-  const togglePauseResume = () => {
-    const nextPaused = !isPaused;
-    setIsPaused(nextPaused);
+  const triggerCapture = () => {
+    if (status === "solving" || !publisherOnline) return;
     if (socketRef.current) {
-      socketRef.current.emit("toggle_pause", { roomId: cleanRoomId, paused: nextPaused });
+      socketRef.current.emit("request_capture", { roomId: cleanRoomId });
     }
   };
 
@@ -119,7 +110,6 @@ export default function SubscriberPage({ params }: PageProps) {
     });
 
     socket.on("new_answer", (data) => {
-      if (isPausedRef.current) return;
       setStatus("idle");
       if (data.error) {
         setStatus("error");
@@ -135,7 +125,6 @@ export default function SubscriberPage({ params }: PageProps) {
     });
 
     socket.on("status_update", ({ status: newStatus, message }) => {
-      if (isPausedRef.current) return;
       setStatus(newStatus);
       setStatusMessage(message);
       if (newStatus === "solving") {
@@ -186,17 +175,24 @@ export default function SubscriberPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#060508] text-[#f4f4f7] flex flex-col p-4 select-none relative overflow-hidden">
-      {/* Permanent Pause/Resume button in the top right */}
+      {/* Permanent Camera button in the top right */}
       <button
-        onClick={togglePauseResume}
-        title={isPaused ? "Akışı Başlat" : "Akışı Durdur"}
+        onClick={triggerCapture}
+        disabled={status === "solving" || !publisherOnline}
+        title="Ekranı Yakala ve Çöz"
         className={`fixed top-3.5 right-3.5 z-50 w-12 h-12 rounded-full border flex items-center justify-center transition-all duration-300 ${
-          isPaused
-            ? "border-red-500 bg-red-950/40 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
-            : "border-violet-500/40 bg-violet-950/20 text-violet-400 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:border-violet-400"
+          status === "solving"
+            ? "border-amber-500 bg-amber-950/40 text-amber-400 cursor-not-allowed animate-pulse"
+            : !publisherOnline
+            ? "border-zinc-800 bg-zinc-950/50 text-zinc-600 cursor-not-allowed"
+            : "border-violet-500 bg-violet-950/20 text-violet-400 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:scale-105 active:scale-95 active:bg-violet-900/40"
         }`}
       >
-        {isPaused ? <Play size={20} /> : <Pause size={20} />}
+        {status === "solving" ? (
+          <Loader2 className="animate-spin text-amber-400" size={20} />
+        ) : (
+          <Camera size={20} />
+        )}
       </button>
 
       {/* Dynamic Background Glows */}

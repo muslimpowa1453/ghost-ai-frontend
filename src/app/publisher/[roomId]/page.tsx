@@ -38,26 +38,13 @@ export default function PublisherPage({ params }: PageProps) {
   const [subscriberOnline, setSubscriberOnline] = useState(false);
   const [aiStatus, setAiStatus] = useState("idle"); // idle | solving | error
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [diffThreshold, setDiffThreshold] = useState(1.50); // Pixel difference % threshold
-
-  // Ref to bypass React state stale closures in intervals
-  const diffThresholdRef = useRef(1.50);
-  useEffect(() => {
-    diffThresholdRef.current = diffThreshold;
-  }, [diffThreshold]);
 
   // Refs for video, canvas & socket
   const socketRef = useRef<Socket | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const diffCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const highResCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const prevFrameData = useRef<ImageData | null>(null);
-  const intervalId = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<any>(null);
-  const isPausedRef = useRef(false);
-  const isChangePendingRef = useRef(false);
-  const lastChangeTimeRef = useRef<number>(0);
   const imageCaptureRef = useRef<any>(null);
 
   const startKeepAliveAudio = () => {
@@ -144,9 +131,9 @@ export default function PublisherPage({ params }: PageProps) {
       // Not relevant for publisher itself, but can keep sync
     });
 
-    socket.on("capture_state_changed", ({ paused }) => {
-      isPausedRef.current = paused;
-      addLog(paused ? "Ekran yakalama uzaktan durduruldu (DURDURULDU)." : "Ekran yakalama uzaktan devam ettirildi (AKTIF).", paused ? "warn" : "success");
+    socket.on("request_capture", () => {
+      addLog("Mobil cihazdan ekran çözme talebi alındı. Çözüm başlatılıyor...", "info");
+      captureAndSendFrame();
     });
 
     socket.on("room_joined", ({ roomId: joinedRoom, role }) => {
@@ -234,12 +221,8 @@ export default function PublisherPage({ params }: PageProps) {
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play()
-          .then(() => {
-            startDiffingInterval();
-          })
           .catch((err) => {
             addLog(`Görüntü başlatılamadı: ${err.message}`, "error");
-            startDiffingInterval(); // fallback
           });
       }
     } catch (err: any) {
@@ -252,11 +235,6 @@ export default function PublisherPage({ params }: PageProps) {
     stopKeepAliveAudio();
     imageCaptureRef.current = null;
 
-    if (intervalId.current) {
-      clearInterval(intervalId.current);
-      intervalId.current = null;
-    }
-
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
@@ -266,59 +244,40 @@ export default function PublisherPage({ params }: PageProps) {
       videoRef.current.srcObject = null;
     }
 
-    prevFrameData.current = null;
     setIsSharing(false);
     addLog("Ekran paylaşımı durduruldu.", "warn");
   };
 
-  // periodic screen check
-  const startDiffingInterval = () => {
-    if (intervalId.current) clearInterval(intervalId.current);
-
-    addLog("Ekran değişim takibi aktif (1sn periyot).", "info");
-
-    intervalId.current = setInterval(() => {
-      captureAndCheckDiff();
-    }, 1000);
-  };
-
-  // Diffing algorithm
-  const captureAndCheckDiff = async (force = false) => {
-    // Skip checking if paused by remote subscriber
-    if (isPausedRef.current && !force) return;
-
+  // Capture screen and send to AI
+  const captureAndSendFrame = async () => {
     try {
       const video = videoRef.current;
-      const diffCanvas = diffCanvasRef.current;
       const highResCanvas = highResCanvasRef.current;
 
       const isVideoActive = video && video.srcObject !== null;
-      if (!video || !diffCanvas || !highResCanvas || (!isVideoActive && !force)) return;
-
-      const diffCtx = diffCanvas.getContext("2d");
-      const highResCtx = highResCanvas.getContext("2d");
-
-      if (!diffCtx || !highResCtx) {
-        addLog("Canvas 2D context alınamadı.", "error");
+      if (!video || !highResCanvas || !isVideoActive) {
+        addLog("Hata: Video yayını veya kanvas aktif değil.", "error");
         return;
       }
 
-      // Wait until video has loaded dimensions
-      if (video.videoWidth === 0 || video.videoHeight === 0) return;
+      const highResCtx = highResCanvas.getContext("2d");
+      if (!highResCtx) {
+        addLog("Kanvas context alınamadı.", "error");
+        return;
+      }
 
-      // Dynamically size canvases to match video aspect ratio and resolution
-      diffCanvas.width = 480;
-      diffCanvas.height = Math.round((480 / video.videoWidth) * video.videoHeight) || 270;
+      if (video.videoWidth === 0 || video.videoHeight === 0) {
+        addLog("Görüntü boyutları yükleniyor, lütfen tekrar deneyin.", "warn");
+        return;
+      }
 
       highResCanvas.width = video.videoWidth;
       highResCanvas.height = video.videoHeight;
 
-      // Draw frame to canvases using ImageCapture for background support, with video fallback
       let drawSuccess = false;
       if (imageCaptureRef.current) {
         try {
           const imageBitmap = await imageCaptureRef.current.grabFrame();
-          diffCtx.drawImage(imageBitmap, 0, 0, diffCanvas.width, diffCanvas.height);
           highResCtx.drawImage(imageBitmap, 0, 0, highResCanvas.width, highResCanvas.height);
           imageBitmap.close();
           drawSuccess = true;
@@ -328,80 +287,13 @@ export default function PublisherPage({ params }: PageProps) {
       }
 
       if (!drawSuccess) {
-        diffCtx.drawImage(video, 0, 0, diffCanvas.width, diffCanvas.height);
         highResCtx.drawImage(video, 0, 0, highResCanvas.width, highResCanvas.height);
       }
 
-      // Get pixel data from small canvas
-      const currentFrame = diffCtx.getImageData(0, 0, diffCanvas.width, diffCanvas.height);
-
-      if (force) {
-        addLog("Zorunlu çözüm tetiklendi. Ekran AI'a iletiliyor...", "info");
-        sendFrameToAI(highResCanvas);
-        prevFrameData.current = currentFrame;
-        isChangePendingRef.current = false;
-        return;
-      }
-
-      if (!prevFrameData.current) {
-        // First frame capture
-        addLog("İlk ekran karesi kaydedildi. Değişim takibi başladı.", "info");
-        prevFrameData.current = currentFrame;
-        // Send the initial frame
-        sendFrameToAI(highResCanvas);
-        return;
-      }
-
-      // Compare pixel data
-      const data1 = currentFrame.data;
-      const data2 = prevFrameData.current.data;
-      let diffCount = 0;
-      const totalPixels = data1.length / 4;
-      const pixelDiffThreshold = 20; // threshold for single color channel diff (0-255)
-
-      // Step by 4 pixels (16 array indices) to reduce CPU load drastically
-      for (let i = 0; i < data1.length; i += 16) {
-        const rDiff = Math.abs(data1[i] - data2[i]);
-        const gDiff = Math.abs(data1[i + 1] - data2[i + 1]);
-        const bDiff = Math.abs(data1[i + 2] - data2[i + 2]);
-
-        if (rDiff > pixelDiffThreshold || gDiff > pixelDiffThreshold || bDiff > pixelDiffThreshold) {
-          diffCount++;
-        }
-      }
-
-      const changedPercentage = (diffCount / (totalPixels / 4)) * 100;
-
-      // 1. Detect large layout shift (e.g. going to next question)
-      if (changedPercentage >= diffThresholdRef.current) {
-        if (!isChangePendingRef.current) {
-          isChangePendingRef.current = true;
-          addLog("Ekran değişimi algılandı, sayfanın yüklenmesi bekleniyor...", "info");
-        }
-        lastChangeTimeRef.current = Date.now();
-      }
-
-      // 2. Wait until screen is quiet/settled (percentage change is very low)
-      if (isChangePendingRef.current) {
-        const now = Date.now();
-        const timeSinceLastChange = now - lastChangeTimeRef.current;
-
-        // If the current screen is stable (little to no changes)
-        if (changedPercentage < 0.30) {
-          addLog("Ekran yüklendi ve sabitlendi, AI'a gönderiliyor...", "info");
-          sendFrameToAI(highResCanvas);
-          isChangePendingRef.current = false;
-        } else if (timeSinceLastChange > 4000) {
-          // Fallback: if it takes too long to settle, send anyway
-          addLog("Zaman aşımı: Sabitlenmesi beklenmeden gönderiliyor...", "warn");
-          sendFrameToAI(highResCanvas);
-          isChangePendingRef.current = false;
-        }
-      }
-
-      prevFrameData.current = currentFrame;
+      addLog("Ekran görüntüsü başarıyla alındı. AI'a iletiliyor...", "info");
+      sendFrameToAI(highResCanvas);
     } catch (err: any) {
-      addLog(`Ekran değişim takibinde hata: ${err.message}`, "error");
+      addLog(`Ekran yakalamada hata: ${err.message}`, "error");
     }
   };
 
@@ -494,7 +386,7 @@ export default function PublisherPage({ params }: PageProps) {
               )}
 
               <button
-                onClick={() => captureAndCheckDiff(true)}
+                onClick={captureAndSendFrame}
                 disabled={!isSharing}
                 className={`w-full flex items-center justify-center gap-2 py-3 px-5 rounded-xl font-semibold transition-all duration-200 ${
                   isSharing
@@ -503,28 +395,8 @@ export default function PublisherPage({ params }: PageProps) {
                 }`}
               >
                 <RefreshCw size={16} className={aiStatus === "solving" ? "animate-spin" : ""} />
-                <span>Ekranı Şimdi Çöz (Force Solve)</span>
+                <span>Ekranı Şimdi Çöz (Manuel)</span>
               </button>
-            </div>
-
-            {/* Sensitivity Settings */}
-            <div className="space-y-2 pt-2 border-t border-zinc-900">
-              <div className="flex justify-between text-xs">
-                <span className="text-zinc-500 font-medium">Değişim Hassasiyeti</span>
-                <span className="text-violet-400 font-semibold">% {diffThreshold.toFixed(2)}</span>
-              </div>
-              <input
-                type="range"
-                min="0.01"
-                max="2.00"
-                step="0.01"
-                value={diffThreshold}
-                onChange={(e) => setDiffThreshold(parseFloat(e.target.value))}
-                className="w-full accent-violet-500 bg-zinc-900 rounded-lg appearance-none h-1 cursor-pointer"
-              />
-              <p className="text-[10px] text-zinc-600 leading-normal pl-0.5">
-                * Ekrandaki piksel değişimi bu yüzden büyük olduğunda AI otomatik tetiklenir. Karakter yazımını yakalamak için % 0.05 - 0.10 arası önerilir.
-              </p>
             </div>
           </div>
 
@@ -587,7 +459,6 @@ export default function PublisherPage({ params }: PageProps) {
               />
 
               {/* Hidden diff comparison canvases */}
-              <canvas ref={diffCanvasRef} width={480} height={270} className="hidden" />
               <canvas ref={highResCanvasRef} width={1280} height={720} className="hidden" />
             </div>
           </div>
