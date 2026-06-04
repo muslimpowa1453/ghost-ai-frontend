@@ -32,7 +32,12 @@ export default function SubscriberPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<"idle" | "solving" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [showFullSolution, setShowFullSolution] = useState(false);
   const socketRef = useRef<Socket | null>(null);
+
+  useEffect(() => {
+    setShowFullSolution(false);
+  }, [answer]);
 
   // Helper to get socket connection URL
   const getSocketUrl = () => {
@@ -320,40 +325,77 @@ export default function SubscriberPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* 3. Code Answer - Typing Symbol Tracker (No Copy Button) */}
+            {/* 3. Code Answer View */}
             {answer && isAnswerCode && (
-              <div className="w-full flex flex-col space-y-5">
-                <div className="flex items-center justify-between">
-                  <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
-                    <FileCode2 size={10} className="text-violet-400" /> Kod Takip
-                  </div>
-                </div>
-
-                <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-6 flex flex-col items-center space-y-6 shadow-2xl relative">
-                  <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
-                  
-                  {/* The 4 boxes */}
-                  <div className="flex items-center gap-3 justify-center py-2">
-                    {renderCharBox(char1, true, hasError)}
-                    {renderCharBox(char2, false, false)}
-                    {renderCharBox(char3, false, false)}
-                    {renderCharBox(char4, false, false)}
-                  </div>
-
-                  {/* Feedback of typed text from the PC screen */}
-                  {userTyped && (
-                    <div className="text-[10px] font-mono bg-zinc-950/60 px-3.5 py-2 rounded-xl border border-zinc-850 max-w-xs text-center leading-normal break-all">
-                      <span className="text-zinc-500 uppercase font-bold tracking-wider mr-1.5">Ekrandaki:</span>
-                      <span className="text-violet-400 font-semibold">{userTyped}</span>
+              <>
+                {/* 3a. Display full code block if not in tracking mode or clicked "Show Full Solution" */}
+                {(!isCodeTracker || showFullSolution) ? (
+                  <div className="w-full flex flex-col space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
+                        <FileCode2 size={10} className="text-violet-400" /> Tam Çözüm
+                      </div>
+                      {isCodeTracker && (
+                        <button
+                          onClick={() => setShowFullSolution(false)}
+                          className="text-[10px] text-zinc-500 hover:text-zinc-300 font-bold uppercase tracking-wider underline transition-colors"
+                        >
+                          Takip Moduna Dön
+                        </button>
+                      )}
                     </div>
-                  )}
 
-                  {/* Progress indicator */}
-                  <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
-                    Karakter: {correctLen} / {targetCode.length}
+                    <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-5 shadow-2xl relative">
+                      <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
+                      <pre className="text-base md:text-lg font-mono text-zinc-200 overflow-x-auto leading-relaxed select-text text-left whitespace-pre-wrap break-all max-h-[75vh] pr-1">
+                        <code>{targetCode}</code>
+                      </pre>
+                    </div>
                   </div>
-                </div>
-              </div>
+                ) : (
+                  /* 3b. Display 4-symbol tracker */
+                  <div className="w-full flex flex-col space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
+                        <FileCode2 size={10} className="text-violet-400" /> Kod Takip
+                      </div>
+                    </div>
+
+                    <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-6 flex flex-col items-center space-y-6 shadow-2xl relative">
+                      <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
+                      
+                      {/* The 4 boxes */}
+                      <div className="flex items-center gap-3 justify-center py-2">
+                        {renderCharBox(char1, true, hasError)}
+                        {renderCharBox(char2, false, false)}
+                        {renderCharBox(char3, false, false)}
+                        {renderCharBox(char4, false, false)}
+                      </div>
+
+                      {/* Feedback of typed text from the PC screen */}
+                      {userTyped && (
+                        <div className="text-[10px] font-mono bg-zinc-950/60 px-3.5 py-2 rounded-xl border border-zinc-850 max-w-xs text-center leading-normal break-all">
+                          <span className="text-zinc-500 uppercase font-bold tracking-wider mr-1.5">Ekrandaki:</span>
+                          <span className="text-violet-400 font-semibold">{userTyped}</span>
+                        </div>
+                      )}
+
+                      {/* Progress and show full solution toggle */}
+                      <div className="w-full flex flex-col items-center gap-3 pt-2 border-t border-zinc-900/50">
+                        <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
+                          Karakter: {correctLen} / {targetCode.length}
+                        </div>
+                        <button
+                          onClick={() => setShowFullSolution(true)}
+                          className="text-[10px] text-zinc-650 hover:text-zinc-400 font-bold uppercase tracking-wider underline transition-colors"
+                        >
+                          Tüm Çözümü Göster
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
