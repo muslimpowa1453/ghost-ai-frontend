@@ -32,8 +32,14 @@ export default function SubscriberPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<"idle" | "solving" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
+  const [typedText, setTypedText] = useState("");
 
   const socketRef = useRef<Socket | null>(null);
+
+  // Reset typed text when answer changes
+  useEffect(() => {
+    setTypedText("");
+  }, [answer]);
 
   // Helper to get socket connection URL
   const getSocketUrl = () => {
@@ -154,6 +160,63 @@ export default function SubscriberPage({ params }: PageProps) {
   const isAnswerCode = detectCode(answer);
   const formattedAnswer = cleanContent(answer);
 
+  // Typing simulation tracker calculations for Code Answers
+  const targetCode = formattedAnswer || "";
+  let firstMismatchIndex = -1;
+  for (let i = 0; i < typedText.length; i++) {
+    if (i >= targetCode.length || typedText[i] !== targetCode[i]) {
+      firstMismatchIndex = i;
+      break;
+    }
+  }
+
+  const hasError = firstMismatchIndex !== -1;
+  const correctLen = hasError ? firstMismatchIndex : typedText.length;
+
+  const char1 = correctLen < targetCode.length ? targetCode[correctLen] : "";
+  const char2 = correctLen + 1 < targetCode.length ? targetCode[correctLen + 1] : "";
+  const char3 = correctLen + 2 < targetCode.length ? targetCode[correctLen + 2] : "";
+  const char4 = correctLen + 3 < targetCode.length ? targetCode[correctLen + 3] : "";
+
+  const renderCharBox = (char: string, isActive: boolean, isError: boolean) => {
+    if (!char) {
+      return (
+        <div className="w-14 h-16 rounded-xl border border-dashed border-zinc-800 bg-zinc-950/10 flex items-center justify-center text-zinc-750 text-xs font-mono">
+          -
+        </div>
+      );
+    }
+
+    const isSpecial = char === " " || char === "\n" || char === "\t";
+    const label = char === " " ? "SPC" : char === "\n" ? "ENT" : char === "\t" ? "TAB" : char;
+
+    let boxClass = "w-14 h-16 rounded-xl border flex flex-col items-center justify-center font-mono transition-all duration-200 ";
+    if (isActive) {
+      if (isError) {
+        boxClass += "border-red-500 bg-red-950/20 text-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-shake";
+      } else {
+        boxClass += "border-violet-500 bg-violet-950/20 text-violet-400 shadow-[0_0_15px_rgba(168,85,247,0.3)] scale-105";
+      }
+    } else {
+      boxClass += "border-zinc-850 bg-zinc-950/40 text-zinc-650 opacity-60";
+    }
+
+    return (
+      <div className={boxClass}>
+        <span className={isSpecial ? "text-[10px] font-bold tracking-wider" : "text-2xl font-bold"}>
+          {label}
+        </span>
+      </div>
+    );
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      setTypedText((prev) => prev + "\n");
+    }
+  };
+
   return (
     <main className="min-h-screen bg-[#060508] text-[#f4f4f7] flex flex-col p-4 select-none relative overflow-hidden">
       {/* Dynamic Background Glows */}
@@ -190,8 +253,8 @@ export default function SubscriberPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Main Content Area - Full screen centered */}
-      <div className="flex-grow flex flex-col items-center justify-center py-6 px-2 z-10 w-full max-w-lg mx-auto">
+      {/* Main Content Area - Shifted to the top */}
+      <div className="flex-grow flex flex-col items-center justify-start pt-12 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
         
         {/* Error message */}
         {error && (
@@ -226,9 +289,9 @@ export default function SubscriberPage({ params }: PageProps) {
               </div>
             )}
 
-            {/* 2. Short text / Option Answer - Huge Render */}
+            {/* 2. Short text / Option Answer - Huge Render (No Copy Button) */}
             {answer && !isAnswerCode && (
-              <div className="w-full flex flex-col items-center justify-center text-center space-y-8 py-8">
+              <div className="w-full flex flex-col items-center justify-start text-center space-y-8 py-8">
                 <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
                   <FileText size={10} className="text-violet-400" /> Nihai Cevap
                 </div>
@@ -236,39 +299,57 @@ export default function SubscriberPage({ params }: PageProps) {
                 <h2 className="text-7xl md:text-9xl font-black tracking-tight text-white select-text break-words max-w-full drop-shadow-[0_0_35px_rgba(255,255,255,0.15)] leading-none px-2">
                   {formattedAnswer}
                 </h2>
-
-                <button
-                  onClick={copyAnswer}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl border border-zinc-800 bg-zinc-900/30 active:bg-zinc-900 text-zinc-400 hover:text-white text-xs font-semibold transition-all duration-150 mt-4"
-                >
-                  {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                  <span>{copied ? "Kopyalandı!" : "Cevabı Kopyala"}</span>
-                </button>
               </div>
             )}
 
-            {/* 3. Code Answer - Syntax Formatted */}
+            {/* 3. Code Answer - Typing Symbol Tracker (No Copy Button) */}
             {answer && isAnswerCode && (
-              <div className="w-full flex flex-col space-y-4">
+              <div className="w-full flex flex-col space-y-5">
                 <div className="flex items-center justify-between">
                   <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
-                    <FileCode2 size={10} className="text-violet-400" /> Kod Çözümü
+                    <FileCode2 size={10} className="text-violet-400" /> Kod Takip
                   </div>
-
-                  <button
-                    onClick={copyAnswer}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg border border-zinc-800/80 bg-zinc-950/50 active:bg-zinc-900 text-zinc-500 active:text-white text-[10px] font-bold transition-all duration-150"
-                  >
-                    {copied ? <Check size={10} className="text-emerald-400" /> : <Copy size={10} />}
-                    <span>{copied ? "Kopyalandı!" : "Kopyala"}</span>
-                  </button>
                 </div>
 
-                <div className="w-full rounded-xl overflow-hidden border border-zinc-800/80 bg-zinc-950/50 shadow-2xl relative">
-                  <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-violet-500/20 to-transparent" />
-                  <pre className="p-4 text-xs font-mono text-zinc-300 overflow-x-auto leading-relaxed select-text text-left max-h-[70vh]">
-                    <code>{formattedAnswer}</code>
-                  </pre>
+                <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-6 flex flex-col items-center space-y-6 shadow-2xl relative">
+                  <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
+                  
+                  {/* The 4 boxes */}
+                  <div className="flex items-center gap-3 justify-center py-2">
+                    {renderCharBox(char1, true, hasError)}
+                    {renderCharBox(char2, false, false)}
+                    {renderCharBox(char3, false, false)}
+                    {renderCharBox(char4, false, false)}
+                  </div>
+
+                  {/* Input area */}
+                  <div className="w-full max-w-xs relative">
+                    <input
+                      type="text"
+                      value={typedText}
+                      onChange={(e) => setTypedText(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Buraya yazarak takip edin..."
+                      className="w-full py-2.5 px-4 rounded-xl bg-zinc-950/90 border border-zinc-850 focus:border-violet-500/50 focus:outline-none text-center text-sm font-mono text-zinc-200 placeholder:text-zinc-700 transition-all shadow-inner"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck="false"
+                    />
+                    {typedText.length > 0 && (
+                      <button
+                        onClick={() => setTypedText("")}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-500 hover:text-zinc-300 transition-colors uppercase tracking-wider"
+                      >
+                        Temizle
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Progress indicator */}
+                  <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
+                    Karakter: {correctLen} / {targetCode.length}
+                  </div>
                 </div>
               </div>
             )}
