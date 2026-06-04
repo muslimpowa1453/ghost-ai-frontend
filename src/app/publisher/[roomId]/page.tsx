@@ -54,6 +54,7 @@ export default function PublisherPage({ params }: PageProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const prevFrameData = useRef<ImageData | null>(null);
   const intervalId = useRef<NodeJS.Timeout | null>(null);
+  const isPausedRef = useRef(false);
 
   // Helper to add logs to the console simulator
   const addLog = (text: string, type: LogEntry["type"] = "info") => {
@@ -110,6 +111,11 @@ export default function PublisherPage({ params }: PageProps) {
 
     socket.on("publisher_status", ({ online }) => {
       // Not relevant for publisher itself, but can keep sync
+    });
+
+    socket.on("capture_state_changed", ({ paused }) => {
+      isPausedRef.current = paused;
+      addLog(paused ? "Ekran yakalama uzaktan durduruldu (DURDURULDU)." : "Ekran yakalama uzaktan devam ettirildi (AKTIF).", paused ? "warn" : "success");
     });
 
     socket.on("room_joined", ({ roomId: joinedRoom, role }) => {
@@ -235,6 +241,9 @@ export default function PublisherPage({ params }: PageProps) {
 
   // Diffing algorithm
   const captureAndCheckDiff = (force = false) => {
+    // Skip checking if paused by remote subscriber
+    if (isPausedRef.current && !force) return;
+
     try {
       const video = videoRef.current;
       const diffCanvas = diffCanvasRef.current;

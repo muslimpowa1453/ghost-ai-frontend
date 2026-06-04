@@ -13,7 +13,9 @@ import {
   WifiOff, 
   HelpCircle,
   FileCode2,
-  FileText
+  FileText,
+  Play,
+  Pause
 } from "lucide-react";
 
 interface PageProps {
@@ -33,6 +35,21 @@ export default function SubscriberPage({ params }: PageProps) {
   const [status, setStatus] = useState<"idle" | "solving" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
   const [showFullSolution, setShowFullSolution] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
+
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  const togglePauseResume = () => {
+    const nextPaused = !isPaused;
+    setIsPaused(nextPaused);
+    if (socketRef.current) {
+      socketRef.current.emit("toggle_pause", { roomId: cleanRoomId, paused: nextPaused });
+    }
+  };
+
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
@@ -92,6 +109,7 @@ export default function SubscriberPage({ params }: PageProps) {
     });
 
     socket.on("new_answer", (data) => {
+      if (isPausedRef.current) return;
       setStatus("idle");
       if (data.error) {
         setStatus("error");
@@ -107,6 +125,7 @@ export default function SubscriberPage({ params }: PageProps) {
     });
 
     socket.on("status_update", ({ status: newStatus, message }) => {
+      if (isPausedRef.current) return;
       setStatus(newStatus);
       setStatusMessage(message);
       if (newStatus === "solving") {
@@ -242,13 +261,26 @@ export default function SubscriberPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#060508] text-[#f4f4f7] flex flex-col p-4 select-none relative overflow-hidden">
+      {/* Permanent Pause/Resume button in the top right */}
+      <button
+        onClick={togglePauseResume}
+        title={isPaused ? "Akışı Başlat" : "Akışı Durdur"}
+        className={`fixed top-3.5 right-3.5 z-50 w-12 h-12 rounded-full border flex items-center justify-center transition-all duration-300 ${
+          isPaused
+            ? "border-red-500 bg-red-950/40 text-red-400 shadow-[0_0_20px_rgba(239,68,68,0.4)] animate-pulse"
+            : "border-violet-500/40 bg-violet-950/20 text-violet-400 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:border-violet-400"
+        }`}
+      >
+        {isPaused ? <Play size={20} /> : <Pause size={20} />}
+      </button>
+
       {/* Dynamic Background Glows */}
       {status === "solving" && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-violet-600/10 blur-[80px] animate-pulse pointer-events-none" />
       )}
 
-      {/* Header bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-900 z-10">
+      {/* Header bar with padding right for the floating button */}
+      <div className="flex items-center justify-between pb-3 border-b border-zinc-900 z-10 pr-16">
         <button
           onClick={() => router.push("/")}
           className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-xs font-semibold"
@@ -347,7 +379,7 @@ export default function SubscriberPage({ params }: PageProps) {
 
                     <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-5 shadow-2xl relative">
                       <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
-                      <pre className="text-base md:text-lg font-mono text-zinc-200 overflow-x-auto leading-relaxed select-text text-left whitespace-pre-wrap break-all max-h-[75vh] pr-1">
+                      <pre className="text-2xl font-bold font-mono text-zinc-200 overflow-x-auto leading-relaxed select-text text-left whitespace-pre-wrap break-all max-h-[75vh] pr-1">
                         <code>{targetCode}</code>
                       </pre>
                     </div>
