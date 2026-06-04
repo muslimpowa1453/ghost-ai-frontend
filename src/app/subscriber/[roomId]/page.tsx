@@ -32,14 +32,7 @@ export default function SubscriberPage({ params }: PageProps) {
   const [copied, setCopied] = useState(false);
   const [status, setStatus] = useState<"idle" | "solving" | "error">("idle");
   const [statusMessage, setStatusMessage] = useState("");
-  const [typedText, setTypedText] = useState("");
-
   const socketRef = useRef<Socket | null>(null);
-
-  // Reset typed text when answer changes
-  useEffect(() => {
-    setTypedText("");
-  }, [answer]);
 
   // Helper to get socket connection URL
   const getSocketUrl = () => {
@@ -160,18 +153,50 @@ export default function SubscriberPage({ params }: PageProps) {
   const isAnswerCode = detectCode(answer);
   const formattedAnswer = cleanContent(answer);
 
+  // Parse CODE_TRACKER response
+  const parseCodeTracker = (text: string) => {
+    const lines = text.split("\n");
+    let solution = "";
+    let typed = "";
+    let hasError = false;
+
+    lines.forEach((line) => {
+      if (line.startsWith("FULL_SOLUTION:")) {
+        solution = line.slice("FULL_SOLUTION:".length);
+      } else if (line.startsWith("TYPED:")) {
+        typed = line.slice("TYPED:".length);
+      } else if (line.startsWith("ERROR:")) {
+        hasError = line.slice("ERROR:".length).trim().toLowerCase() === "true";
+      }
+    });
+
+    return { solution, typed, hasError };
+  };
+
   // Typing simulation tracker calculations for Code Answers
-  const targetCode = formattedAnswer || "";
+  const isCodeTracker = answer.includes("CODE_TRACKER");
+  let targetCode = formattedAnswer || "";
+  let userTyped = "";
+  let apiHasError = false;
+
+  if (isCodeTracker) {
+    const parsed = parseCodeTracker(answer);
+    targetCode = parsed.solution;
+    userTyped = parsed.typed;
+    apiHasError = parsed.hasError;
+  }
+
+  // Mismatch calculation (double safety check)
   let firstMismatchIndex = -1;
-  for (let i = 0; i < typedText.length; i++) {
-    if (i >= targetCode.length || typedText[i] !== targetCode[i]) {
+  for (let i = 0; i < userTyped.length; i++) {
+    if (i >= targetCode.length || userTyped[i] !== targetCode[i]) {
       firstMismatchIndex = i;
       break;
     }
   }
 
-  const hasError = firstMismatchIndex !== -1;
-  const correctLen = hasError ? firstMismatchIndex : typedText.length;
+  const hasError = apiHasError || firstMismatchIndex !== -1;
+  const correctLen = (firstMismatchIndex !== -1) ? firstMismatchIndex : userTyped.length;
 
   const char1 = correctLen < targetCode.length ? targetCode[correctLen] : "";
   const char2 = correctLen + 1 < targetCode.length ? targetCode[correctLen + 1] : "";
@@ -210,13 +235,6 @@ export default function SubscriberPage({ params }: PageProps) {
     );
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      setTypedText((prev) => prev + "\n");
-    }
-  };
-
   return (
     <main className="min-h-screen bg-[#060508] text-[#f4f4f7] flex flex-col p-4 select-none relative overflow-hidden">
       {/* Dynamic Background Glows */}
@@ -253,8 +271,8 @@ export default function SubscriberPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Main Content Area - Shifted to the top */}
-      <div className="flex-grow flex flex-col items-center justify-start pt-12 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
+      {/* Main Content Area - Shifted to the very top */}
+      <div className="flex-grow flex flex-col items-center justify-start pt-2 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
         
         {/* Error message */}
         {error && (
@@ -322,29 +340,13 @@ export default function SubscriberPage({ params }: PageProps) {
                     {renderCharBox(char4, false, false)}
                   </div>
 
-                  {/* Input area */}
-                  <div className="w-full max-w-xs relative">
-                    <input
-                      type="text"
-                      value={typedText}
-                      onChange={(e) => setTypedText(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="Buraya yazarak takip edin..."
-                      className="w-full py-2.5 px-4 rounded-xl bg-zinc-950/90 border border-zinc-850 focus:border-violet-500/50 focus:outline-none text-center text-sm font-mono text-zinc-200 placeholder:text-zinc-700 transition-all shadow-inner"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck="false"
-                    />
-                    {typedText.length > 0 && (
-                      <button
-                        onClick={() => setTypedText("")}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-zinc-500 hover:text-zinc-300 transition-colors uppercase tracking-wider"
-                      >
-                        Temizle
-                      </button>
-                    )}
-                  </div>
+                  {/* Feedback of typed text from the PC screen */}
+                  {userTyped && (
+                    <div className="text-[10px] font-mono bg-zinc-950/60 px-3.5 py-2 rounded-xl border border-zinc-850 max-w-xs text-center leading-normal break-all">
+                      <span className="text-zinc-500 uppercase font-bold tracking-wider mr-1.5">Ekrandaki:</span>
+                      <span className="text-violet-400 font-semibold">{userTyped}</span>
+                    </div>
+                  )}
 
                   {/* Progress indicator */}
                   <div className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider">
