@@ -175,33 +175,13 @@ export default function SubscriberPage({ params }: PageProps) {
 
   return (
     <main className="min-h-screen bg-[#060508] text-[#f4f4f7] flex flex-col p-4 select-none relative overflow-hidden">
-      {/* Permanent Camera button in the top right */}
-      <button
-        onClick={triggerCapture}
-        disabled={status === "solving" || !publisherOnline}
-        title="Ekranı Yakala ve Çöz"
-        className={`fixed top-3.5 right-3.5 z-50 w-12 h-12 rounded-full border flex items-center justify-center transition-all duration-300 ${
-          status === "solving"
-            ? "border-amber-500 bg-amber-950/40 text-amber-400 cursor-not-allowed animate-pulse"
-            : !publisherOnline
-            ? "border-zinc-800 bg-zinc-950/50 text-zinc-600 cursor-not-allowed"
-            : "border-violet-500 bg-violet-950/20 text-violet-400 shadow-[0_0_15px_rgba(168,85,247,0.25)] hover:scale-105 active:scale-95 active:bg-violet-900/40"
-        }`}
-      >
-        {status === "solving" ? (
-          <Loader2 className="animate-spin text-amber-400" size={20} />
-        ) : (
-          <Camera size={20} />
-        )}
-      </button>
-
       {/* Dynamic Background Glows */}
       {status === "solving" && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 rounded-full bg-violet-600/10 blur-[80px] animate-pulse pointer-events-none" />
       )}
 
-      {/* Header bar with padding right for the floating button */}
-      <div className="flex items-center justify-between pb-3 border-b border-zinc-900 z-10 pr-16">
+      {/* Header bar */}
+      <div className="flex items-center justify-between pb-3 border-b border-zinc-900 z-10">
         <button
           onClick={() => router.push("/")}
           className="flex items-center gap-1.5 text-zinc-400 hover:text-white transition-colors text-xs font-semibold"
@@ -229,9 +209,8 @@ export default function SubscriberPage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Main Content Area - Shifted to the very top */}
-      <div className="flex-grow flex flex-col items-center justify-start pt-2 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
-        
+      {/* Main Content Area */}
+      <div className="flex-grow flex flex-col items-center justify-between pt-4 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
         {/* Error message */}
         {error && (
           <div className="w-full glass-panel border-red-500/10 bg-red-950/10 text-red-400 rounded-xl p-4 text-center text-xs leading-relaxed mb-4">
@@ -239,64 +218,92 @@ export default function SubscriberPage({ params }: PageProps) {
           </div>
         )}
 
-        {/* Solving / Loading state */}
-        {status === "solving" && (
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="animate-spin text-violet-400" size={32} />
-            <span className="text-zinc-500 text-xs font-semibold uppercase tracking-widest animate-pulse">
-              {statusMessage || "Çözümleniyor..."}
-            </span>
-          </div>
-        )}
-
-        {/* Answer displays */}
-        {status !== "solving" && !error && (
-          <>
-            {/* 1. Empty State */}
-            {!answer && (
-              <div className="text-center space-y-2 p-6">
-                <div className="inline-flex p-3 rounded-full bg-zinc-950 border border-zinc-900 text-zinc-600 mb-2">
-                  <Smartphone size={24} />
+        {/* Dynamic Display of content or solving indicator */}
+        <div className="w-full flex-grow flex flex-col justify-center items-center py-2">
+          {status === "solving" ? (
+            <div className="flex flex-col items-center gap-3">
+              <Loader2 className="animate-spin text-violet-400" size={32} />
+              <span className="text-zinc-500 text-xs font-semibold uppercase tracking-widest animate-pulse">
+                {statusMessage || "Çözümleniyor..."}
+              </span>
+            </div>
+          ) : (
+            <>
+              {/* 1. Empty State */}
+              {!answer && !error && (
+                <div className="text-center space-y-2 p-6">
+                  <div className="inline-flex p-3 rounded-full bg-zinc-950 border border-zinc-900 text-zinc-600 mb-2">
+                    <Smartphone size={24} />
+                  </div>
+                  <h4 className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Cevap Ekranı</h4>
+                  <p className="text-zinc-600 text-xs max-w-[240px] mx-auto">
+                    Ekrandaki soruyu çözmek için aşağıdaki kamera butonuna basın.
+                  </p>
                 </div>
-                <h4 className="text-zinc-400 text-xs font-semibold uppercase tracking-wider">Cevap Ekranı</h4>
-                <p className="text-zinc-600 text-xs max-w-[240px] mx-auto">
-                  Ekrandaki soru değiştiğinde, yapay zekanın cevabı anında bu ekrana yansıtılacaktır.
-                </p>
-              </div>
-            )}
+              )}
 
-            {/* 2. Short text / Option Answer - Huge Render (No Copy Button) */}
-            {answer && !isAnswerCode && (
-              <div className="w-full flex flex-col items-center justify-start text-center space-y-4 py-2">
-                <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
-                  <FileText size={10} className="text-violet-400" /> Nihai Cevap
-                </div>
-                
-                <h2 className="text-7xl md:text-9xl font-black tracking-tight text-white select-text break-words max-w-full drop-shadow-[0_0_35px_rgba(255,255,255,0.15)] leading-none px-2">
-                  {formattedAnswer}
-                </h2>
-              </div>
-            )}
-
-            {/* 3. Code Answer - Large and Readable (No Copy Button) */}
-            {answer && isAnswerCode && (
-              <div className="w-full flex flex-col space-y-3">
-                <div className="flex items-center justify-between">
+              {/* 2. Short text / Option Answer - Huge Render (No Copy Button) */}
+              {answer && !isAnswerCode && !error && (
+                <div className="w-full flex flex-col items-center justify-center text-center space-y-4 py-2">
                   <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
-                    <FileCode2 size={10} className="text-violet-400" /> Kod Çözümü
+                    <FileText size={10} className="text-violet-400" /> Nihai Cevap
+                  </div>
+                  
+                  <h2 className="text-7xl md:text-9xl font-black tracking-tight text-white select-text break-words max-w-full drop-shadow-[0_0_35px_rgba(255,255,255,0.15)] leading-none px-2 py-4">
+                    {formattedAnswer}
+                  </h2>
+                </div>
+              )}
+
+              {/* 3. Code Answer - Large and Readable (No Copy Button) */}
+              {answer && isAnswerCode && !error && (
+                <div className="w-full flex flex-col space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5 bg-zinc-950/40 px-3 py-1 rounded-full border border-zinc-900">
+                      <FileCode2 size={10} className="text-violet-400" /> Kod Çözümü
+                    </div>
+                  </div>
+
+                  <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-5 shadow-2xl relative">
+                    <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
+                    <pre className="text-3xl sm:text-4xl font-black font-mono text-zinc-200 overflow-x-auto leading-normal select-text text-left whitespace-pre-wrap break-words max-h-[55vh] pr-1">
+                      <code>{formattedAnswer}</code>
+                    </pre>
                   </div>
                 </div>
+              )}
+            </>
+          )}
+        </div>
 
-                <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-5 shadow-2xl relative">
-                  <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
-                  <pre className="text-3xl sm:text-4xl font-black font-mono text-zinc-200 overflow-x-auto leading-normal select-text text-left whitespace-pre-wrap break-words max-h-[75vh] pr-1">
-                    <code>{formattedAnswer}</code>
-                  </pre>
-                </div>
-              </div>
+        {/* Huge Camera Button at the bottom */}
+        <div className="w-full pt-4 mt-auto">
+          <button
+            onClick={triggerCapture}
+            disabled={status === "solving"}
+            className={`w-full flex flex-col items-center justify-center gap-3 py-7 px-6 rounded-3xl border transition-all duration-300 ${
+              status === "solving"
+                ? "border-amber-500/30 bg-amber-950/20 text-amber-400 cursor-not-allowed"
+                : "border-violet-500/30 bg-violet-950/10 hover:bg-violet-950/25 text-violet-400 hover:text-violet-300 shadow-[0_0_30px_rgba(168,85,247,0.15)] hover:scale-[1.02] active:scale-[0.98]"
+            }`}
+          >
+            {status === "solving" ? (
+              <>
+                <Loader2 className="animate-spin text-amber-400" size={44} />
+                <span className="text-xs font-bold uppercase tracking-widest text-amber-400 animate-pulse">
+                  Ekran Analiz Ediliyor...
+                </span>
+              </>
+            ) : (
+              <>
+                <Camera size={44} className="stroke-[1.5]" />
+                <span className="text-xs font-extrabold uppercase tracking-widest">
+                  Soruyu Çöz (Ekranı Çek)
+                </span>
+              </>
             )}
-          </>
-        )}
+          </button>
+        </div>
       </div>
 
       {/* Connection warning */}
