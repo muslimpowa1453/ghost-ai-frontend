@@ -56,6 +56,8 @@ export default function PublisherPage({ params }: PageProps) {
   const intervalId = useRef<NodeJS.Timeout | null>(null);
   const audioCtxRef = useRef<any>(null);
   const isPausedRef = useRef(false);
+  const isChangePendingRef = useRef(false);
+  const lastChangeTimeRef = useRef<number>(0);
   
 
   const startKeepAliveAudio = () => {
@@ -313,6 +315,7 @@ export default function PublisherPage({ params }: PageProps) {
         addLog("Zorunlu çözüm tetiklendi. Ekran AI'a iletiliyor...", "info");
         sendFrameToAI(highResCanvas);
         prevFrameData.current = currentFrame;
+        isChangePendingRef.current = false;
         return;
       }
 
@@ -345,9 +348,31 @@ export default function PublisherPage({ params }: PageProps) {
 
       const changedPercentage = (diffCount / (totalPixels / 4)) * 100;
 
+      // 1. Detect large layout shift (e.g. going to next question)
       if (changedPercentage >= diffThresholdRef.current) {
-        addLog(`Ekranda değişim algılandı: %${changedPercentage.toFixed(2)}`, "info");
-        sendFrameToAI(highResCanvas);
+        if (!isChangePendingRef.current) {
+          isChangePendingRef.current = true;
+          addLog("Ekran değişimi algılandı, sayfanın yüklenmesi bekleniyor...", "info");
+        }
+        lastChangeTimeRef.current = Date.now();
+      }
+
+      // 2. Wait until screen is quiet/settled (percentage change is very low)
+      if (isChangePendingRef.current) {
+        const now = Date.now();
+        const timeSinceLastChange = now - lastChangeTimeRef.current;
+
+        // If the current screen is stable (little to no changes)
+        if (changedPercentage < 0.30) {
+          addLog("Ekran yüklendi ve sabitlendi, AI'a gönderiliyor...", "info");
+          sendFrameToAI(highResCanvas);
+          isChangePendingRef.current = false;
+        } else if (timeSinceLastChange > 4000) {
+          // Fallback: if it takes too long to settle, send anyway
+          addLog("Zaman aşımı: Sabitlenmesi beklenmeden gönderiliyor...", "warn");
+          sendFrameToAI(highResCanvas);
+          isChangePendingRef.current = false;
+        }
       }
 
       prevFrameData.current = currentFrame;
