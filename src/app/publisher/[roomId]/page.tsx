@@ -55,6 +55,17 @@ export default function PublisherPage({ params }: PageProps) {
   const prevFrameData = useRef<ImageData | null>(null);
   const intervalId = useRef<NodeJS.Timeout | null>(null);
   const isPausedRef = useRef(false);
+  
+  const aiStatusRef = useRef("idle");
+  useEffect(() => {
+    aiStatusRef.current = aiStatus;
+  }, [aiStatus]);
+
+  const isChangePendingRef = useRef(false);
+  const lastChangeTimeRef = useRef<number>(0);
+  const firstChangeTimeRef = useRef<number>(0);
+  const latestBase64FrameRef = useRef<string | null>(null);
+  const isFramePendingRef = useRef(false);
 
   // Helper to add logs to the console simulator
   const addLog = (text: string, type: LogEntry["type"] = "info") => {
@@ -122,22 +133,34 @@ export default function PublisherPage({ params }: PageProps) {
       addLog(`Odaya katılma başarılı: ${joinedRoom} (${role})`, "success");
     });
 
+    const checkAndSendQueuedFrame = () => {
+      if (isFramePendingRef.current && latestBase64FrameRef.current && socketRef.current && socketRef.current.connected) {
+        addLog("AI boşta kaldı, sıradaki güncel ekran karesi gönderiliyor.", "info");
+        socketRef.current.emit("new_frame", { roomId: cleanRoomId, image: latestBase64FrameRef.current });
+        isFramePendingRef.current = false;
+        latestBase64FrameRef.current = null;
+      }
+    };
+
     socket.on("new_answer", (data) => {
+      const nextStatus = data.error ? "error" : "idle";
+      setAiStatus(nextStatus);
+      aiStatusRef.current = nextStatus;
       if (data.error) {
-        setAiStatus("error");
         addLog(`AI Hata Bildirdi: ${data.error}`, "error");
       } else {
-        setAiStatus("idle");
         addLog(`AI Cevabı Alındı: ${data.answer.substring(0, 30)}...`, "success");
       }
+      checkAndSendQueuedFrame();
     });
 
     socket.on("status_update", ({ status, message }) => {
+      setAiStatus(status);
+      aiStatusRef.current = status;
       if (status === "solving") {
-        setAiStatus("solving");
         addLog(`AI Çözümleme İşlemi: ${message}`, "info");
       } else if (status === "idle") {
-        setAiStatus("idle");
+        checkAndSendQueuedFrame();
       }
     });
 
@@ -281,6 +304,7 @@ export default function PublisherPage({ params }: PageProps) {
         addLog("Zorunlu çözüm tetiklendi. Ekran AI'a iletiliyor...", "info");
         sendFrameToAI(highResCanvas);
         prevFrameData.current = currentFrame;
+        isChangePendingRef.current = false;
         return;
       }
 
@@ -314,8 +338,25 @@ export default function PublisherPage({ params }: PageProps) {
       const changedPercentage = (diffCount / (totalPixels / 4)) * 100;
 
       if (changedPercentage >= diffThresholdRef.current) {
-        addLog(`Ekranda değişim algılandı: %${changedPercentage.toFixed(2)}`, "info");
-        sendFrameToAI(highResCanvas);
+        if (!isChangePendingRef.current) {
+          isChangePendingRef.current = true;
+          firstChangeTimeRef.current = Date.now();
+        }
+        lastChangeTimeRef.current = Date.now();
+        addLog(`Ekranda değişim algılandı (%${changedPercentage.toFixed(2)}), sabitlenmesi bekleniyor...`, "info");
+      }
+
+      // Settling check: if stable for 1.5s OR continuous changes for 5s, solve it
+      if (isChangePendingRef.current) {
+        const now = Date.now();
+        const timeSinceLastChange = now - lastChangeTimeRef.current;
+        const timeSinceFirstChange = now - firstChangeTimeRef.current;
+
+        if (timeSinceLastChange >= 1500 || timeSinceFirstChange >= 5000) {
+          addLog("Ekran sabitlendi, AI'a iletiliyor...", "info");
+          sendFrameToAI(highResCanvas);
+          isChangePendingRef.current = false;
+        }
       }
 
       prevFrameData.current = currentFrame;
@@ -333,8 +374,17 @@ export default function PublisherPage({ params }: PageProps) {
     try {
       // Convert high-res canvas to compressed jpeg base64
       const base64Image = canvas.toDataURL("image/jpeg", 0.85);
-      socketRef.current.emit("new_frame", { roomId: cleanRoomId, image: base64Image });
-      addLog("Ekran karesi AI'a gönderildi.", "info");
+      latestBase64FrameRef.current = base64Image;
+
+      if (aiStatusRef.current === "solving") {
+        isFramePendingRef.current = true;
+        addLog("AI meşgul, en güncel ekran karesi sıraya alındı.", "warn");
+      } else {
+        socketRef.current.emit("new_frame", { roomId: cleanRoomId, image: base64Image });
+        isFramePendingRef.current = false;
+        latestBase64FrameRef.current = null;
+        addLog("Ekran karesi AI'a gönderildi.", "info");
+      }
     } catch (err: any) {
       addLog(`Görüntü dönüştürme/gönderme hatası: ${err.message}`, "error");
     }
