@@ -54,9 +54,36 @@ export default function PublisherPage({ params }: PageProps) {
   const streamRef = useRef<MediaStream | null>(null);
   const prevFrameData = useRef<ImageData | null>(null);
   const intervalId = useRef<NodeJS.Timeout | null>(null);
+  const audioCtxRef = useRef<any>(null);
   const isPausedRef = useRef(false);
   
 
+  const startKeepAliveAudio = () => {
+    try {
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      const ctx = new AudioContextClass();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.value = 0.0; // Completely silent
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(0);
+      audioCtxRef.current = ctx;
+      addLog("Arka plan uyku önleyici ses dalgası aktif edildi.", "info");
+    } catch (e: any) {
+      console.error("Keep-alive audio failed", e);
+    }
+  };
+
+  const stopKeepAliveAudio = () => {
+    if (audioCtxRef.current) {
+      try {
+        audioCtxRef.current.close();
+      } catch (e) {}
+      audioCtxRef.current = null;
+    }
+  };
 
   // Helper to add logs to the console simulator
   const addLog = (text: string, type: LogEntry["type"] = "info") => {
@@ -186,6 +213,7 @@ export default function PublisherPage({ params }: PageProps) {
 
       streamRef.current = stream;
       setIsSharing(true);
+      startKeepAliveAudio();
       addLog("Ekran paylaşımı başarıyla başlatıldı.", "success");
 
       // Handle stream end (user clicks "Stop sharing" native chrome banner)
@@ -211,6 +239,8 @@ export default function PublisherPage({ params }: PageProps) {
   };
 
   const stopSharing = () => {
+    stopKeepAliveAudio();
+
     if (intervalId.current) {
       clearInterval(intervalId.current);
       intervalId.current = null;

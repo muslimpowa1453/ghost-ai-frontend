@@ -99,8 +99,23 @@ export default function SubscriberPage({ params }: PageProps) {
       setError("");
     });
 
+    let offlineTimeout: NodeJS.Timeout | null = null;
+
     socket.on("publisher_status", ({ online }) => {
-      setPublisherOnline(online);
+      if (online) {
+        if (offlineTimeout) {
+          clearTimeout(offlineTimeout);
+          offlineTimeout = null;
+        }
+        setPublisherOnline(true);
+      } else {
+        // Wait 5 seconds before showing offline in case of temporary background sleep/reconnect
+        if (!offlineTimeout) {
+          offlineTimeout = setTimeout(() => {
+            setPublisherOnline(false);
+          }, 5000);
+        }
+      }
     });
 
     socket.on("new_answer", (data) => {
@@ -130,6 +145,7 @@ export default function SubscriberPage({ params }: PageProps) {
 
     return () => {
       socket.disconnect();
+      if (offlineTimeout) clearTimeout(offlineTimeout);
     };
   }, [cleanRoomId]);
 
