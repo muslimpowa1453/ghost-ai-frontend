@@ -58,7 +58,7 @@ export default function PublisherPage({ params }: PageProps) {
   const isPausedRef = useRef(false);
   const isChangePendingRef = useRef(false);
   const lastChangeTimeRef = useRef<number>(0);
-  
+  const imageCaptureRef = useRef<any>(null);
 
   const startKeepAliveAudio = () => {
     try {
@@ -216,10 +216,18 @@ export default function PublisherPage({ params }: PageProps) {
       streamRef.current = stream;
       setIsSharing(true);
       startKeepAliveAudio();
+      
+      const videoTrack = stream.getVideoTracks()[0];
+      const ImageCaptureClass = (window as any).ImageCapture;
+      if (ImageCaptureClass) {
+        imageCaptureRef.current = new ImageCaptureClass(videoTrack);
+        addLog("Arka plan görsel yakalayıcı (ImageCapture) aktif edildi.", "info");
+      }
+
       addLog("Ekran paylaşımı başarıyla başlatıldı.", "success");
 
       // Handle stream end (user clicks "Stop sharing" native chrome banner)
-      stream.getVideoTracks()[0].onended = () => {
+      videoTrack.onended = () => {
         stopSharing();
       };
 
@@ -242,6 +250,7 @@ export default function PublisherPage({ params }: PageProps) {
 
   const stopSharing = () => {
     stopKeepAliveAudio();
+    imageCaptureRef.current = null;
 
     if (intervalId.current) {
       clearInterval(intervalId.current);
@@ -274,7 +283,7 @@ export default function PublisherPage({ params }: PageProps) {
   };
 
   // Diffing algorithm
-  const captureAndCheckDiff = (force = false) => {
+  const captureAndCheckDiff = async (force = false) => {
     // Skip checking if paused by remote subscriber
     if (isPausedRef.current && !force) return;
 
@@ -304,9 +313,24 @@ export default function PublisherPage({ params }: PageProps) {
       highResCanvas.width = video.videoWidth;
       highResCanvas.height = video.videoHeight;
 
-      // Draw frame to canvases
-      diffCtx.drawImage(video, 0, 0, diffCanvas.width, diffCanvas.height);
-      highResCtx.drawImage(video, 0, 0, highResCanvas.width, highResCanvas.height);
+      // Draw frame to canvases using ImageCapture for background support, with video fallback
+      let drawSuccess = false;
+      if (imageCaptureRef.current) {
+        try {
+          const imageBitmap = await imageCaptureRef.current.grabFrame();
+          diffCtx.drawImage(imageBitmap, 0, 0, diffCanvas.width, diffCanvas.height);
+          highResCtx.drawImage(imageBitmap, 0, 0, highResCanvas.width, highResCanvas.height);
+          imageBitmap.close();
+          drawSuccess = true;
+        } catch (captureErr) {
+          // Fallback to video drawing if grabFrame fails
+        }
+      }
+
+      if (!drawSuccess) {
+        diffCtx.drawImage(video, 0, 0, diffCanvas.width, diffCanvas.height);
+        highResCtx.drawImage(video, 0, 0, highResCanvas.width, highResCanvas.height);
+      }
 
       // Get pixel data from small canvas
       const currentFrame = diffCtx.getImageData(0, 0, diffCanvas.width, diffCanvas.height);
