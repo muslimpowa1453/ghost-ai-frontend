@@ -210,7 +210,7 @@ export default function SubscriberPage({ params }: PageProps) {
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-grow flex flex-col items-center justify-between pt-4 pb-6 px-2 z-10 w-full max-w-lg mx-auto">
+      <div className="flex-grow flex flex-col items-center justify-start pt-4 pb-6 px-2 z-10 w-full max-w-lg mx-auto gap-4">
         {/* Error message */}
         {error && (
           <div className="w-full glass-panel border-red-500/10 bg-red-950/10 text-red-400 rounded-xl p-4 text-center text-xs leading-relaxed mb-4">
@@ -219,9 +219,9 @@ export default function SubscriberPage({ params }: PageProps) {
         )}
 
         {/* Dynamic Display of content or solving indicator */}
-        <div className="w-full flex-grow flex flex-col justify-center items-center py-2">
+        <div className="w-full flex flex-col items-center py-2">
           {status === "solving" ? (
-            <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-3 py-6">
               <Loader2 className="animate-spin text-violet-400" size={32} />
               <span className="text-zinc-500 text-xs font-semibold uppercase tracking-widest animate-pulse">
                 {statusMessage || "Çözümleniyor..."}
@@ -276,8 +276,8 @@ export default function SubscriberPage({ params }: PageProps) {
           )}
         </div>
 
-        {/* Huge Camera Button at the bottom */}
-        <div className="w-full pt-4 mt-auto">
+        {/* Huge Camera Button directly below the content */}
+        <div className="w-full pt-2">
           <button
             onClick={triggerCapture}
             disabled={status === "solving"}
