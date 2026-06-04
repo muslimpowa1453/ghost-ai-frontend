@@ -277,7 +277,7 @@ export default function SubscriberPage({ params }: PageProps) {
 
                 <div className="w-full rounded-2xl border border-zinc-850 bg-zinc-950/30 p-5 shadow-2xl relative">
                   <div className="absolute top-0 left-0 w-full h-[1.5px] bg-gradient-to-r from-transparent via-violet-500/25 to-transparent" />
-                  <pre className="text-3xl sm:text-4xl font-black font-mono text-zinc-200 overflow-x-auto leading-normal select-text text-left whitespace-pre-wrap break-all max-h-[75vh] pr-1">
+                  <pre className="text-3xl sm:text-4xl font-black font-mono text-zinc-200 overflow-x-auto leading-normal select-text text-left whitespace-pre-wrap break-words max-h-[75vh] pr-1">
                     <code>{formattedAnswer}</code>
                   </pre>
                 </div>
